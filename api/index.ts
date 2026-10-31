@@ -5,8 +5,12 @@ import { GoogleGenAI, LiveServerMessage, Modality, Type } from "@google/genai";
 import Razorpay from "razorpay";
 import crypto from "crypto";
 import dotenv from "dotenv";
+import fs from "fs";
 
-dotenv.config({ path: path.join(process.cwd(), ".env") });
+const envPath = path.join(process.cwd(), ".env");
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+}
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);

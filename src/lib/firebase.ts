@@ -14,7 +14,11 @@ const firebaseConfig = {
 let app;
 let auth: any = null;
 
-if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined' && firebaseConfig.apiKey !== '') {
+const isConfigValid = firebaseConfig.apiKey && 
+                     firebaseConfig.apiKey !== 'undefined' && 
+                     firebaseConfig.apiKey !== '';
+
+if (isConfigValid) {
   if (!getApps().length) {
     app = initializeApp(firebaseConfig);
     auth = initializeAuth(app, {

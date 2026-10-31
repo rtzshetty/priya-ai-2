@@ -1,0 +1,276 @@
+import React, { useState } from "react";
+import { Loader2, CreditCard, X, Check, Star } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+
+const PLANS = [
+  { id: "1_month", name: "1 Month", price: 50, duration: "1 month", popular: false },
+  { id: "3_months", name: "3 Months", price: 150, duration: "3 months", popular: true },
+  { id: "1_year", name: "1 Year", price: 600, duration: "1 year", popular: false },
+];
+
+export default function RazorpayCheckout({ onPaymentSuccess }: { onPaymentSuccess?: () => void }) {
+  const [showModal, setShowModal] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<"idle" | "success" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handlePayment = async (plan: typeof PLANS[0]) => {
+    try {
+      setLoadingPlan(plan.id);
+      setPaymentStatus("idle");
+      setErrorMessage("");
+
+      const isMedian = typeof window !== "undefined" && !!(window as any).median;
+
+      if (isMedian) {
+        try {
+          if ((window as any).median?.iap?.purchase) {
+            await (window as any).median.iap.purchase({ productID: plan.id });
+            setPaymentStatus("success");
+            setShowModal(false);
+            if (onPaymentSuccess) onPaymentSuccess();
+          } else {
+            throw new Error("In-App Purchase is not available.");
+          }
+        } catch (err: any) {
+          setPaymentStatus("error");
+          setErrorMessage(err?.message || "Payment failed or cancelled");
+        }
+        return;
+      }
+
+      const res = await loadRazorpayScript();
+      if (!res) {
+        throw new Error("Razorpay SDK failed to load. Are you online?");
+      }
+
+      // Step 1: Create Order
+      const orderResponse = await fetch("/api/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: plan.price * 100, 
+          currency: "INR",
+          receipt: "receipt_" + Date.now(),
+        }),
+      });
+
+      if (!orderResponse.ok) {
+        let errorMsg = "Failed to create order";
+        const contentType = orderResponse.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await orderResponse.json();
+          errorMsg = errorData.error || errorMsg;
+        } else {
+          const textData = await orderResponse.text();
+          console.error("Non-JSON error from server:", textData);
+          errorMsg = `Server error: ${textData.substring(0, 50)}...`;
+        }
+        throw new Error(errorMsg);
+      }
+
+      const orderData = await orderResponse.json();
+
+      // Step 2: Open Razorpay Modal
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Use Vite env var
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Priya Premium",
+        description: `Unlock Premium Features (${plan.name})`,
+        order_id: orderData.id,
+        handler: async function (response: any) {
+          try {
+            // Step 3: Verify Signature
+            const verifyResponse = await fetch("/api/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+
+            if (!verifyResponse.ok) {
+              throw new Error("Payment verification failed");
+            }
+
+            const verifyData = await verifyResponse.json();
+            if (verifyData.success) {
+              setPaymentStatus("success");
+              setShowModal(false);
+              if (onPaymentSuccess) onPaymentSuccess();
+            } else {
+              throw new Error("Invalid signature");
+            }
+          } catch (err: any) {
+            setPaymentStatus("error");
+            setErrorMessage(err.message || "Verification failed");
+          }
+        },
+        prefill: {
+          name: "User",
+          email: "user@example.com",
+          contact: "9999999999",
+        },
+        theme: {
+          color: "#8b5cf6", // Violet 500
+        },
+      };
+
+      const rzp1 = new (window as any).Razorpay(options);
+      
+      rzp1.on("payment.failed", function (response: any) {
+        setPaymentStatus("error");
+        setErrorMessage(response.error.description || "Payment failed");
+      });
+
+      rzp1.open();
+    } catch (err: any) {
+      setPaymentStatus("error");
+      setErrorMessage(err.message || "Something went wrong");
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex flex-col items-center relative">
+        <div className="flex flex-col items-center gap-1">
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-1 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-violet-600 to-pink-600 text-white rounded-full text-[10px] sm:text-xs font-medium hover:opacity-90 transition-opacity whitespace-nowrap"
+          >
+            <Star size={12} className="fill-white" />
+            Upgrade to Premium
+          </button>
+          
+          {paymentStatus === "error" && !showModal && (
+            <div className="absolute top-12 text-red-400 text-[10px] px-2 py-1 bg-red-500/10 rounded border border-red-500/20 whitespace-nowrap z-50">
+              {errorMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-3xl bg-[#111] border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <button 
+                onClick={() => setShowModal(false)}
+                className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors z-10"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="text-center mb-6 shrink-0 mt-4">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-violet-500 to-pink-500 flex items-center justify-center mx-auto mb-4">
+                  <Star size={24} className="text-white fill-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-2 font-serif">Choose Your Plan</h2>
+                <p className="text-white/60 text-sm max-w-sm mx-auto">Unlock Physiological mode and premium features tailored for you.</p>
+              </div>
+
+              {paymentStatus === "error" && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs text-center shrink-0">
+                  {errorMessage}
+                </div>
+              )}
+
+              <div className="overflow-y-auto px-1 pb-6 custom-scrollbar">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {PLANS.map((plan) => (
+                    <div 
+                      key={plan.id}
+                      className={`relative flex flex-col p-6 rounded-2xl border transition-all duration-300 ${
+                        plan.popular 
+                          ? "border-violet-500 bg-violet-500/10 shadow-[0_0_20px_rgba(139,92,246,0.15)] ring-1 ring-violet-500/50" 
+                          : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10"
+                      }`}
+                    >
+                      {plan.popular && (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-violet-600 text-white text-[10px] font-bold rounded-full uppercase tracking-wider whitespace-nowrap shadow-xl z-10">
+                          Most Popular
+                        </div>
+                      )}
+                      
+                      <div className="mb-6 mt-2">
+                        <h3 className="text-white/60 text-xs font-semibold uppercase tracking-widest mb-2">{plan.name}</h3>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-bold text-white">₹{plan.price}</span>
+                          <span className="text-white/40 text-sm">/{plan.duration}</span>
+                        </div>
+                      </div>
+ 
+                      <div className="space-y-4 mb-8 flex-1">
+                        <div className="flex items-center gap-3 text-sm text-white/80">
+                          <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                            <Check size={12} className="text-green-400" />
+                          </div>
+                          <span>Physiological Mode</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-white/80">
+                          <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                            <Check size={12} className="text-green-400" />
+                          </div>
+                          <span>Emotional Analytics</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-white/80">
+                          <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                            <Check size={12} className="text-green-400" />
+                          </div>
+                          <span>Priority Support</span>
+                        </div>
+                      </div>
+ 
+                      <button
+                        onClick={() => handlePayment(plan)}
+                        disabled={loadingPlan !== null}
+                        className={`w-full py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                          plan.popular 
+                            ? "bg-violet-600 text-white hover:bg-violet-500 shadow-lg shadow-violet-500/30" 
+                            : "bg-white/10 text-white hover:bg-white/20 border border-white/5"
+                        } disabled:opacity-50`}
+                      >
+                        {loadingPlan === plan.id ? (
+                          <Loader2 size={18} className="animate-spin" />
+                        ) : (
+                          "Select Plan"
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}

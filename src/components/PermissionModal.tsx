@@ -4,16 +4,27 @@ import { MicOff, AlertCircle, Clock } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
-  errorType?: 'PERMISSION_DENIED' | 'QUOTA_EXCEEDED' | 'MIC_ERROR' | string;
+  errorType?: 'PERMISSION_DENIED' | 'QUOTA_EXCEEDED' | 'MIC_ERROR' | 'SECURITY_ERROR' | string;
 }
 
 export default function PermissionModal({ onClose, errorType = 'PERMISSION_DENIED' }: Props) {
   const isQuota = errorType === 'QUOTA_EXCEEDED';
   const isMicError = errorType === 'MIC_ERROR';
-  const isPermission = errorType === 'PERMISSION_DENIED';
+  const isSecurity = errorType === 'SECURITY_ERROR';
+  const isPermission = errorType === 'PERMISSION_DENIED' || isSecurity;
+
+  const [isIframe, setIsIframe] = React.useState(false);
+
+  React.useEffect(() => {
+    try {
+      setIsIframe(window.self !== window.top);
+    } catch (e) {
+      setIsIframe(true);
+    }
+  }, []);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -32,14 +43,16 @@ export default function PermissionModal({ onClose, errorType = 'PERMISSION_DENIE
         </div>
         
         <h2 className="text-2xl font-serif font-medium text-white mb-3">
-          {isQuota ? 'Quota Exceeded' : isMicError ? 'Microphone Issue' : 'Access Denied'}
+          {isQuota ? 'Quota Exceeded' : isMicError ? 'Microphone Issue' : (isSecurity ? 'Security Restriction' : 'Access Denied')}
         </h2>
         <p className="text-white/60 text-sm mb-6 leading-relaxed">
           {isQuota 
             ? "Priya has been talking too much today! You've reached the Gemini API usage limit. Please wait a while or try again later."
             : isMicError 
               ? "Something went wrong with your microphone. Priya is listening, but she only hears static! Maybe check if another app is using it?"
-              : "Priya cannot hear you because microphone access is blocked. She's sassy, but she's not a psychic!"}
+              : isSecurity
+                ? "Browser security is blocking the microphone. This often happens in preview windows or untrusted frames."
+                : "Priya cannot hear you because microphone access is blocked. She's sassy, but she's not a psychic!"}
         </p>
         
         {!isQuota ? (
@@ -52,12 +65,17 @@ export default function PermissionModal({ onClose, errorType = 'PERMISSION_DENIE
                   <li>Check your system audio settings for the primary input device.</li>
                   <li>Try refreshing the page.</li>
                 </>
+              ) : isIframe ? (
+                <>
+                  <li className="text-violet-400 font-bold">You are in a Preview Window. Click 'Open in New Tab' below to fix this instantly.</li>
+                  <li>In a new tab, the browser will ask for permission properly.</li>
+                </>
               ) : (
                 <>
                   <li>Click the <strong>lock icon (🔒)</strong> next to the URL bar.</li>
                   <li>Toggle <strong>Microphone</strong> to <strong>Allow</strong>.</li>
                   <li>Refresh this page.</li>
-                  <li className="text-amber-400 font-medium">Or try opening in a new tab if you're in a preview.</li>
+                  <li className="text-amber-400 font-medium italic">If you are on mobile, check your browser's site settings.</li>
                 </>
               )}
             </ol>
@@ -73,8 +91,12 @@ export default function PermissionModal({ onClose, errorType = 'PERMISSION_DENIE
         
         <div className="flex flex-col w-full gap-3">
           <button 
-            onClick={() => window.open(window.location.href, '_blank')}
-            className="w-full py-3 px-4 bg-violet-500 text-white font-medium rounded-xl hover:bg-violet-600 transition-colors flex items-center justify-center gap-2"
+            onClick={() => {
+              const url = window.location.href;
+              const win = window.open(url, '_blank');
+              if (win) win.focus();
+            }}
+            className={`w-full py-3 px-4 ${isIframe ? 'bg-violet-500 animate-pulse ring-4 ring-violet-500/20' : 'bg-violet-500'} text-white font-medium rounded-xl hover:bg-violet-600 transition-colors flex items-center justify-center gap-2`}
           >
             Open in New Tab
           </button>

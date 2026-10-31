@@ -430,6 +430,8 @@ export default function App() {
         const msg = e?.message || "";
         if (msg === "Permission denied") {
           setErrorType("PERMISSION_DENIED");
+        } else if (msg === "Security restriction") {
+          setErrorType("SECURITY_ERROR");
         } else if (msg === "Microphone error") {
           setErrorType("MIC_ERROR");
         } else {

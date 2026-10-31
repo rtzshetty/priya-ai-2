@@ -80,6 +80,10 @@ export class LiveSessionManager {
       } catch (micError: any) {
         console.warn("Microphone access warning details:", micError);
         
+        if (micError.name === 'SecurityError') {
+          throw new Error("Security restriction");
+        }
+
         // Try fallback with simplest constraints
         if (micError.name === 'OverconstrainedError' || micError.name === 'ConstraintNotSatisfiedError') {
           console.log("Retrying with simple audio constraints...");
@@ -87,6 +91,7 @@ export class LiveSessionManager {
             this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           } catch (retryError: any) {
             console.warn("Fallback microphone access warning:", retryError);
+            if (retryError.name === 'SecurityError') throw new Error("Security restriction");
             throw new Error(retryError.name === 'NotAllowedError' ? "Permission denied" : "Microphone error: " + retryError.message);
           }
         } else {

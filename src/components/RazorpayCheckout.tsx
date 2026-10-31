@@ -179,7 +179,7 @@ export default function RazorpayCheckout({ onPaymentSuccess }: { onPaymentSucces
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-3xl bg-[#111] border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              className="relative w-full max-w-4xl bg-[#111] border border-white/10 rounded-3xl p-5 md:p-8 shadow-2xl overflow-hidden flex flex-col max-h-[95vh] mx-auto"
             >
               <button 
                 onClick={() => setShowModal(false)}
@@ -188,12 +188,12 @@ export default function RazorpayCheckout({ onPaymentSuccess }: { onPaymentSucces
                 <X size={20} />
               </button>
 
-              <div className="text-center mb-6 shrink-0 mt-4">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-violet-500 to-pink-500 flex items-center justify-center mx-auto mb-4">
+              <div className="text-center mb-6 shrink-0 mt-2">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-violet-500 to-pink-500 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-violet-500/20">
                   <Star size={24} className="text-white fill-white" />
                 </div>
-                <h2 className="text-2xl font-bold text-white mb-2 font-serif">Choose Your Plan</h2>
-                <p className="text-white/60 text-sm max-w-sm mx-auto">Unlock Physiological mode and premium features tailored for you.</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-white mb-2 font-serif tracking-tight">Choose Your Plan</h2>
+                <p className="text-white/60 text-sm max-w-sm mx-auto px-4">Unlock Physiological mode and premium features tailored for you.</p>
               </div>
 
               {paymentStatus === "error" && (
@@ -203,57 +203,52 @@ export default function RazorpayCheckout({ onPaymentSuccess }: { onPaymentSucces
               )}
 
               <div className="overflow-y-auto px-1 pb-6 custom-scrollbar">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="flex flex-wrap justify-center gap-6">
                   {PLANS.map((plan) => (
                     <div 
                       key={plan.id}
-                      className={`relative flex flex-col p-6 rounded-2xl border transition-all duration-300 ${
+                      className={`relative flex flex-col p-6 rounded-2xl border transition-all duration-300 w-full sm:w-[280px] min-h-[380px] ${
                         plan.popular 
-                          ? "border-violet-500 bg-violet-500/10 shadow-[0_0_20px_rgba(139,92,246,0.15)] ring-1 ring-violet-500/50" 
+                          ? "border-violet-500 bg-violet-500/10 shadow-[0_0_25px_rgba(139,92,246,0.2)] ring-1 ring-violet-500/50" 
                           : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10"
                       }`}
                     >
                       {plan.popular && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-violet-600 text-white text-[10px] font-bold rounded-full uppercase tracking-wider whitespace-nowrap shadow-xl z-10">
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-violet-600 text-white text-[10px] font-extrabold rounded-full uppercase tracking-wider whitespace-nowrap shadow-xl z-10 ring-2 ring-violet-400/30">
                           Most Popular
                         </div>
                       )}
                       
                       <div className="mb-6 mt-2">
-                        <h3 className="text-white/60 text-xs font-semibold uppercase tracking-widest mb-2">{plan.name}</h3>
+                        <h3 className="text-white/60 text-[10px] font-bold uppercase tracking-[0.2em] mb-2">{plan.name}</h3>
                         <div className="flex items-baseline gap-1">
-                          <span className="text-4xl font-bold text-white">₹{plan.price}</span>
+                          <span className="text-4xl font-bold text-white tracking-tighter">₹{plan.price}</span>
                           <span className="text-white/40 text-sm">/{plan.duration}</span>
                         </div>
                       </div>
  
                       <div className="space-y-4 mb-8 flex-1">
-                        <div className="flex items-center gap-3 text-sm text-white/80">
-                          <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
-                            <Check size={12} className="text-green-400" />
+                        {[
+                          "Physiological Mode",
+                          "Emotional Analytics",
+                          "Priority Support",
+                          "Studio Access"
+                        ].map((feature, idx) => (
+                          <div key={idx} className="flex items-center gap-3 text-sm text-white/80">
+                            <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                              <Check size={12} className="text-green-400" />
+                            </div>
+                            <span className="leading-tight">{feature}</span>
                           </div>
-                          <span>Physiological Mode</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-sm text-white/80">
-                          <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
-                            <Check size={12} className="text-green-400" />
-                          </div>
-                          <span>Emotional Analytics</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-sm text-white/80">
-                          <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
-                            <Check size={12} className="text-green-400" />
-                          </div>
-                          <span>Priority Support</span>
-                        </div>
+                        ))}
                       </div>
  
                       <button
                         onClick={() => handlePayment(plan)}
                         disabled={loadingPlan !== null}
-                        className={`w-full py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                        className={`w-full py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] mt-auto ${
                           plan.popular 
-                            ? "bg-violet-600 text-white hover:bg-violet-500 shadow-lg shadow-violet-500/30" 
+                            ? "bg-violet-600 text-white hover:bg-violet-500 shadow-lg shadow-violet-500/40" 
                             : "bg-white/10 text-white hover:bg-white/20 border border-white/5"
                         } disabled:opacity-50`}
                       >

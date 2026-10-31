@@ -236,76 +236,56 @@ function getAI() {
 
   app.post("/api/create-order", async (req, res) => {
     try {
-      const { amount, currency = "INR", receipt = "receipt_1" } = req.body;
-      
-      const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID;
-      const key_secret = process.env.RAZORPAY_KEY_SECRET;
+      const { amount, receipt = "receipt_1" } = req.body;
+      const apiKey = process.env.FAMGATEWAY_API_KEY;
 
-      console.log("Razorpay Key ID check:", key_id ? `Loaded (${key_id.substring(0, 8)}...)` : "MISSING");
-      console.log("Razorpay Secret check:", key_secret ? "Loaded" : "MISSING");
-
-      if (!key_id || !key_secret) {
-        console.error("CRITICAL: Razorpay environment variables are missing on the server.");
-        return res.status(500).json({ 
-          error: "Razorpay is not configured on this server. Please add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to environment variables." 
-        });
+      if (!apiKey) {
+        return res.status(500).json({ error: "FamGateway API key is not configured on the server." });
       }
 
-      if (!amount || amount < 100) {
-        return res.status(400).json({ error: "Amount must be at least 100 paise" });
-      }
-
-      const razorpay = new Razorpay({
-        key_id,
-        key_secret,
+      // According to FamGateway integration flow:
+      // POST /api/v1/order/create
+      const response = await fetch("https://famgateway.in/api/v1/order/create", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          amount: amount / 100, // Razorpay uses paise, FamGateway uses INR
+          currency: "INR",
+          receipt
+        })
       });
 
-      const options = {
-        amount,
-        currency,
-        receipt,
-      };
+      const data = await response.json();
       
-      const order = await razorpay.orders.create(options);
-      res.json(order);
-    } catch (e: any) {
-      console.error("Razorpay Order Error:", JSON.stringify(e, null, 2));
-      if (e.statusCode === 401) {
-        return res.status(401).json({ error: "Unauthorized - Check your Razorpay Secret Key" });
+      if (data.status === "success") {
+        res.json(data);
+      } else {
+        throw new Error(data.message || "Failed to create FamGateway order");
       }
-      res.status(500).json({ error: e.message || "Something went wrong while creating the order", details: e });
+    } catch (e: any) {
+      console.error("FamGateway Order Error:", e);
+      res.status(500).json({ error: e.message || "Something went wrong while creating the order" });
     }
   });
 
-  app.post("/api/verify-payment", (req, res) => {
+  app.get("/api/order-status/:orderId", async (req, res) => {
     try {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-      
-      const key_secret = process.env.RAZORPAY_KEY_SECRET;
-      if (!key_secret) {
-        console.error("CRITICAL: RAZORPAY_KEY_SECRET is missing during verification.");
-        return res.status(500).json({ error: "Server misconfiguration: Razorpay secret is missing." });
-      }
+      const { orderId } = req.params;
+      const apiKey = process.env.FAMGATEWAY_API_KEY;
 
-      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-        return res.status(400).json({ error: "Missing required payment fields" });
-      }
+      if (!apiKey) return res.status(500).json({ error: "Missing API key" });
 
-      const body = razorpay_order_id + "|" + razorpay_payment_id;
-      const expectedSignature = crypto
-        .createHmac("sha256", key_secret)
-        .update(body.toString())
-        .digest("hex");
-                                  
-      if (expectedSignature === razorpay_signature) {
-        res.json({ success: true, message: "Payment verified successfully" });
-      } else {
-        console.warn("Payment verification failed: Signature mismatch");
-        res.status(400).json({ success: false, error: "Invalid signature" });
-      }
+      const response = await fetch(`https://famgateway.in/api/v1/order/status/${orderId}`, {
+        headers: { "Authorization": `Bearer ${apiKey}` }
+      });
+
+      const data = await response.json();
+      res.json(data);
     } catch (e: any) {
-      console.error("Payment Verification Error:", e);
-      res.status(500).json({ error: e.message || "Internal Server Error during verification" });
+      res.status(500).json({ error: e.message });
     }
   });
 

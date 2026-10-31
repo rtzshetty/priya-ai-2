@@ -14,7 +14,7 @@ const firebaseConfig = {
 let app;
 let auth: any = null;
 
-if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined') {
+if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined' && firebaseConfig.apiKey !== '') {
   if (!getApps().length) {
     app = initializeApp(firebaseConfig);
     auth = initializeAuth(app, {
@@ -26,10 +26,18 @@ if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined') {
     auth = getAuth(app);
   }
 } else {
-  console.warn("Firebase configuration is missing. Authentication features are disabled.");
-  // Provide a mock auth object so the app doesn't crash on import, 
-  // but attempting to use auth functions will throw errors that can be caught by the UI.
+  const missingKeys = Object.entries(firebaseConfig)
+    .filter(([_, value]) => !value || value === 'undefined')
+    .map(([key]) => key);
+    
+  console.warn("Firebase configuration is incomplete. Missing keys:", missingKeys);
+  console.log("Environment check:", {
+    isVercel: !!import.meta.env.VITE_VERCEL,
+    envMode: import.meta.env.MODE
+  });
+
   auth = {
+    app: null, // Explicitly set to null to trigger the "Missing Config" UI
     currentUser: null,
     onAuthStateChanged: () => () => {},
   };

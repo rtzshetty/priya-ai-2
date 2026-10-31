@@ -17,40 +17,14 @@ export default function RazorpayCheckout({ onPaymentSuccess }: { onPaymentSucces
   const [paymentStatus, setPaymentStatus] = useState<"idle" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
-
-  const pollOrderStatus = async (orderId: string) => {
-    if (!orderId) return;
-    setIsPolling(true);
-    
-    const interval = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/order-status/${orderId}`);
-        const data = await response.json();
-        
-        if (data.payment_status === "paid" || data.status === "paid") {
-          clearInterval(interval);
-          setIsPolling(false);
-          setPaymentStatus("success");
-          setShowModal(false);
-          if (onPaymentSuccess) onPaymentSuccess();
-        } else if (data.status === "failed") {
-          clearInterval(interval);
-          setIsPolling(false);
-          setPaymentStatus("error");
-          setErrorMessage("Payment failed. Please try again.");
-        }
-      } catch (e) {
-        console.error("Polling error:", e);
-      }
-    }, 5000); // Poll every 5 seconds
-
-    // Stop polling after 10 minutes (safety)
-    setTimeout(() => {
-      clearInterval(interval);
-      setIsPolling(false);
-    }, 600000);
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
   };
 
   const handlePayment = async (plan: typeof PLANS[0]) => {
@@ -59,12 +33,18 @@ export default function RazorpayCheckout({ onPaymentSuccess }: { onPaymentSucces
       setPaymentStatus("idle");
       setErrorMessage("");
 
-      // Step 1: Create FamGateway Order
+      const res = await loadRazorpayScript();
+      if (!res) {
+        throw new Error("Razorpay SDK failed to load. Are you online?");
+      }
+
+      // Step 1: Create Order
       const orderResponse = await fetch("/api/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: plan.price * 100, // Pass amount in paise
+          amount: plan.price * 100, 
+          currency: "INR",
           receipt: "receipt_" + Date.now(),
         }),
       });
@@ -76,21 +56,61 @@ export default function RazorpayCheckout({ onPaymentSuccess }: { onPaymentSucces
 
       const orderData = await orderResponse.json();
 
-      if (orderData.checkout_url) {
-        setCurrentOrderId(orderData.order_id);
-        // Step 2: Redirect to FamGateway Hosted Checkout
-        // We open it in a new tab so the user can come back to this page
-        window.open(orderData.checkout_url, "_blank");
-        
-        // Step 3: Start polling for status
-        pollOrderStatus(orderData.order_id);
-        
-        setToastMessage("Redirected to Payment Gateway. Please complete the payment in the new tab.");
-        setTimeout(() => setToastMessage(null), 5000);
-      } else {
-        throw new Error("Invalid response from payment gateway");
-      }
+      // Step 2: Open Razorpay Modal
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Priya AI Premium",
+        description: `Unlock Premium Features (${plan.name})`,
+        order_id: orderData.id,
+        handler: async function (response: any) {
+          try {
+            // Step 3: Verify Signature
+            const verifyResponse = await fetch("/api/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
 
+            if (!verifyResponse.ok) {
+              throw new Error("Payment verification failed");
+            }
+
+            const verifyData = await verifyResponse.json();
+            if (verifyData.success) {
+              setPaymentStatus("success");
+              setShowModal(false);
+              if (onPaymentSuccess) onPaymentSuccess();
+            } else {
+              throw new Error("Invalid signature");
+            }
+          } catch (err: any) {
+            setPaymentStatus("error");
+            setErrorMessage(err.message || "Verification failed");
+          }
+        },
+        prefill: {
+          name: "User",
+          email: "user@example.com",
+        },
+        theme: {
+          color: "#8b5cf6",
+        },
+      };
+
+      const rzp1 = new (window as any).Razorpay(options);
+      
+      rzp1.on("payment.failed", function (response: any) {
+        setPaymentStatus("error");
+        setErrorMessage(response.error.description || "Payment failed");
+      });
+
+      rzp1.open();
     } catch (err: any) {
       setPaymentStatus("error");
       setErrorMessage(err.message || "Something went wrong");
@@ -233,18 +253,10 @@ export default function RazorpayCheckout({ onPaymentSuccess }: { onPaymentSucces
             exit={{ opacity: 0, y: 20, x: "-50%" }}
             className="fixed bottom-10 left-1/2 z-[10001] px-6 py-3 bg-violet-600 text-white text-sm font-medium rounded-2xl shadow-2xl whitespace-nowrap text-center flex items-center gap-3 border border-white/20"
           >
-            <Loader2 size={16} className="animate-spin" />
             {toastMessage}
           </motion.div>
         )}
       </AnimatePresence>
-
-      {isPolling && (
-        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[10001] px-4 py-2 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs rounded-full backdrop-blur-md flex items-center gap-2">
-          <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-          Waiting for payment confirmation...
-        </div>
-      )}
     </>
   );
 }

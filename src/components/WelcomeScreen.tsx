@@ -37,7 +37,7 @@ export default function WelcomeScreen({ onNameSubmit }: WelcomeScreenProps) {
     e.preventDefault();
     
     if (!auth.app) {
-      setError('Firebase configuration is missing. Please add VITE_FIREBASE_API_KEY to your environment variables or continue as Guest.');
+      setError('Firebase keys are missing in Vercel settings. (1) Go to Vercel Dashboard > Settings > Environment Variables. (2) Add all VITE_FIREBASE_* keys. (3) CRITICAL: Go to "Deployments" and click "Redeploy" for changes to take effect.');
       return;
     }
 
